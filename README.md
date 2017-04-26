@@ -6,7 +6,7 @@ as it isn't really as advanced as lets say cLinux.
 If you are a CC newbie and just want to use it for roleplaying purposes or saving your
 "Minecraft documents" for whatever reason, you might light this one.
 
-[Check out the forum post for more information]()
+[Check out the forum post for more information](http://www.computercraft.info/forums2/index.php?/topic/28583-buildos-easy-to-use-gui-for-craftos/)
 
 ## Basic implemented API and function explanation
 
