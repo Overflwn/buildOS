@@ -1,0 +1,108 @@
+--[[
+	PATH: /buildOS/libs/taskmanager
+	TYPE: Core Library
+	LAST CHANGE: 04/23/17
+	DESCRIPTION:
+		This library/API is a front-end for
+		LUA coroutines specifically designed
+		for buildOS.
+]]
+
+local taskmanager = {}
+
+function taskmanager.createList()
+	local list = {
+		tasks = {},
+		tasklist = true
+	}
+	return list
+end
+
+function taskmanager.createTask(list, name, p, env, core)
+	-- this function creates a task, puts it into the specified environment and finally inserts it into the tasklist
+	if type(list) == "table" and list.tasklist and ((type(p) == "string" and #p > 0 and fs.exists(p) and not fs.isDir(p)) or (type(p) == "function")) and type(env) == "table" then
+		list = list.tasks
+		local task = {
+			name = name,
+			c = nil,
+			dead = false,
+			filtr = nil,
+			core = false,
+			front = true,
+		}
+		local function check(counter, increase)
+			for each, t in ipairs(list) do
+				if t.name == task.name and not increase then
+					task.name = task.name.."-"..tostring(counter)
+					check(counter, true)
+				elseif t.name == task.name and increase then
+					counter = counter+1
+					task.name = string.sub(task.name, 1, #task.name-1)..tostring(counter)
+					check(counter, true)
+				end
+			end
+		end
+		check(1)
+		if core then task.core = true end
+		if type(p) == "string" then
+			local file, err = loadfile(p)
+			if not file then return false, err end
+			function env.closeApp()
+				os.queueEvent("os_killApp", task.name)
+			end
+			setfenv(file, env)
+			task.c = coroutine.create(file)
+			function task:resume(args)
+				if not self.dead and (#args > 0 and args[1] == self.filtr or self.filtr == nil) then
+					local _, ok, err = pcall(coroutine.resume, self.c, unpack(args))
+					local stat = coroutine.status(self.c)
+					if not ok then
+						self.dead = true
+						log("Process "..self.name.." DIED: "..tostring(err))
+						printError(tostring(err))
+						return false, err
+					elseif ok and stat == "dead" then
+						self.dead = true
+						log("Process "..self.name.." FINISHED.")
+						return true
+					else
+						self.filtr = err
+						return true
+					end
+				end
+			end
+			table.insert(list, task)
+			return true
+		elseif type(p) == "function" then
+			function env.closeApp()
+				os.queueEvent("os_killApp", task.name)
+			end
+			setfenv(p, env)
+			task.c = coroutine.create(p)
+			function task:resume(args)
+				if not self.dead and (#args > 0 and args[1] == self.filtr or self.filtr == nil) then
+					local ok, err = coroutine.resume(self.c, unpack(args))
+					local stat = coroutine.status(self.c)
+					if not ok then
+						self.dead = true
+						log("Process "..self.name.." DIED: "..tostring(err))
+						return false, err
+					elseif ok and stat == "dead" then
+						self.dead = true
+						log("Process "..self.name.." FINISHED.")
+						return true
+					else
+						self.filtr = err
+						return true
+					end
+				end
+			end
+			table.insert(list, task)
+			return true
+		end
+	else
+		return false, "table,string,path/function,table expected"
+	end
+end
+
+return taskmanager

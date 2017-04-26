@@ -1,0 +1,201 @@
+--[[
+	APPNAME: Desktop
+	TYPE: Core Application
+	LAST CHANGE: 04/23/17
+	DESCRIPTION:
+		This application is probably
+		the main app of the whole OS.
+		It is there to start up other
+		apps and shows your background
+		picture.
+]]
+
+-- Amount of slots on the X and Y axe
+local amountX, amountY = 0, 0
+local maxX, maxY = term.getSize()
+local currentPage = 1
+local mainFrame = term.current()
+
+-- Table containing information about every slot
+local appSlots = {}
+
+-- Calculate how many pages are required to be able to display every app
+amountX, amountY = math.floor((maxX-1)/5), math.floor(maxY/5)
+local onOnePage = amountX * amountY
+local appList = fs.list("/buildOS/apps/")
+local pages = math.ceil(#appList/onOnePage)
+if pages < 1 then pages = 1 end
+
+-- Instantiate every slot for every app-page
+for i = 1, pages do
+	if not appSlots[i] then appSlots[i] = {} end
+	for j = 1, amountY do
+		if not appSlots[i][j] then appSlots[i][j] = {} end
+		for k = 1, amountX do
+			if not appSlots[i][j][k] then appSlots[i][j][k] = {} end
+			appSlots[i][j][k] = {
+				name = nil,
+				path = nil,
+				appName = nil,
+				x = 5 * k - 3,
+				y = 5 * j - 4,
+				endx = 5 * k,
+				endy = 5 * j,
+			}
+		end
+	end
+end
+
+-- Put every app into the slots
+for i = 1, pages do
+	for j = 1, amountY do
+		for k = 1, amountX do
+			if #appList >= ( ( j * amountX - amountX ) + k ) then
+				local str = appList[( j * amountX - amountX ) + k]
+				local x, y = string.find(str, ".app")
+				
+				str = string.sub(str, 1, x-1)
+				appSlots[i][j][k].appName = str
+				if #str > 4 then str = string.sub(str, 1, 4) end
+				appSlots[i][j][k].name = str
+				appSlots[i][j][k].path = "/buildOS/apps/"..appList[( j * amountX - amountX ) + k].."/"
+			else
+				break
+			end
+		end
+	end
+end
+
+term.setBackgroundColor(colors.lightBlue)
+term.setTextColor(colors.white)
+term.clear()
+term.setCursorPos(2,1)
+
+for j = 1, amountY do
+	for k = 1, amountX do
+		if appSlots[currentPage][j][k].name ~= nil then
+			if fs.exists(appSlots[currentPage][j][k].path.."icon") then
+				local img = paintutils.loadImage(appSlots[currentPage][j][k].path.."icon")
+				paintutils.drawImage(img, appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y)
+				term.setCursorPos(appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y+4)
+				term.setBackgroundColor(colors.lightBlue)
+				term.write(appSlots[currentPage][j][k].name)
+			else
+				local img = paintutils.loadImage("/buildOS/system/dummyIcon")
+				paintutils.drawImage(img, appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y)
+				term.setCursorPos(appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y+4)
+				term.setBackgroundColor(colors.lightBlue)
+				term.write(appSlots[currentPage][j][k].name)
+			end
+		end
+	end
+end
+
+term.setCursorPos(1, maxY)
+term.setBackgroundColor(colors.gray)
+term.write("<")
+term.setCursorPos(maxX, maxY)
+term.write(">")
+
+
+-- Functions
+
+local function redrawPage()
+	local cTerm = term.current()
+	term.redirect(mainFrame)
+	appList = fs.list("/buildOS/apps/")
+	pages = math.ceil(#appList/onOnePage)
+	if pages < 1 then pages = 1 end
+
+	-- Instantiate every slot for every app-page
+	for i = 1, pages do
+		if not appSlots[i] then appSlots[i] = {} end
+		for j = 1, amountY do
+			if not appSlots[i][j] then appSlots[i][j] = {} end
+			for k = 1, amountX do
+				if not appSlots[i][j][k] then appSlots[i][j][k] = {} end
+				appSlots[i][j][k] = {
+					name = nil,
+					path = nil,
+					appName = nil,
+					x = 5 * k - 3,
+					y = 5 * j - 4,
+					endx = 5 * k,
+					endy = 5 * j,
+				}
+			end
+		end
+	end
+
+	-- Put every app into the slots
+	for i = 1, pages do
+		for j = 1, amountY do
+			for k = 1, amountX do
+				if #appList >= ( ( j * amountX - amountX ) + k ) then
+					local str = appList[( j * amountX - amountX ) + k]
+					local x, y = string.find(str, ".app")
+					
+					str = string.sub(str, 1, x-1)
+					appSlots[i][j][k].appName = str
+					if #str > 4 then str = string.sub(str, 1, 4) end
+					appSlots[i][j][k].name = str
+					appSlots[i][j][k].path = "/buildOS/apps/"..appList[( j * amountX - amountX ) + k].."/"
+				else
+					break
+				end
+			end
+		end
+	end
+	term.setBackgroundColor(colors.lightBlue)
+	term.setTextColor(colors.white)
+	term.clear()
+	term.setCursorPos(2,1)
+
+	for j = 1, amountY do
+		for k = 1, amountX do
+			if appSlots[currentPage][j][k].name ~= nil then
+				if fs.exists(appSlots[currentPage][j][k].path.."icon") then
+					local img = paintutils.loadImage(appSlots[currentPage][j][k].path.."icon")
+					paintutils.drawImage(img, appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y)
+					term.setCursorPos(appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y+4)
+					term.setBackgroundColor(colors.lightBlue)
+					term.write(appSlots[currentPage][j][k].name)
+				else
+					local img = paintutils.loadImage("/buildOS/system/dummyIcon")
+					paintutils.drawImage(img, appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y)
+					term.setCursorPos(appSlots[currentPage][j][k].x, appSlots[currentPage][j][k].y+4)
+					term.setBackgroundColor(colors.lightBlue)
+					term.write(appSlots[currentPage][j][k].name)
+				end
+			end
+		end
+	end
+
+	term.setCursorPos(1, maxY)
+	term.setBackgroundColor(colors.gray)
+	term.write("<")
+	term.setCursorPos(maxX, maxY)
+	term.write(">")
+	term.redirect(cTerm)
+end
+
+_G.desktopRefresh = redrawPage
+
+while true do
+	local evt, button, x, y = os.pullEvent("mouse_click")
+	if evt == "mouse_click" and button == 1 and x == maxX and y == maxY and currentPage < pages then
+		currentPage = currentPage + 1
+		redrawPage()
+	elseif evt == "mouse_click" and button == 1 and x == 1 and y == maxY and currentPage > 1 then
+		currentPage = currentPage - 1
+		redrawPage()
+	elseif evt == "mouse_click" and button == 1 then
+		for i = 1, amountY do
+			for j = 1, amountX do
+				if appSlots[currentPage][i][j].name ~= nil and x >= appSlots[currentPage][i][j].x and x <= appSlots[currentPage][i][j].endx and y >= appSlots[currentPage][i][j].y and y <= appSlots[currentPage][i][j].endy then
+					startApp(appSlots[currentPage][i][j].appName)
+				end
+			end
+		end
+	end
+end

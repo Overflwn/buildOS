@@ -1,0 +1,64 @@
+--[[
+
+			buildOS
+	A simple alternative to craftOS for beginners
+	
+	This "Operating System" (More of a front-end GUI for CraftOS)
+	is supposed to be used by new users (if there are any, lol)
+	and is heavily inspired by OneOS (sorry).
+	
+	~ Piorjade
+
+]]
+
+--[[
+	PATH: /startup
+	TYPE: Initial startup file
+	LAST CHANGE: 04/26/17
+	DESCRIPTION:
+		This file initiates the system. (Simple, right?)
+]]
+
+-- Variables
+
+local _ver = 0.1 -- NOTE: This is the version for the WHOLE OS, not only the script
+local _verstr = "buildOS "..tostring(_ver)
+
+_G.os.version = function()
+	return _verstr
+end
+
+-- Functions
+
+
+
+-- Code
+
+term.setBackgroundColor(colors.black)
+term.setTextColor(colors.white)
+term.clear()
+term.setCursorPos(1,1)
+print("Welcome to buildOS! (Ver. "..tostring(_ver)..")")
+print("Loading modules...")
+local modules = fs.list("/buildOS/modules/")
+for each, mod in ipairs(modules) do
+	local file, err = loadfile("/buildOS/modules/"..mod)
+	term.setTextColor(colors.white)
+	local h, j = string.find(mod, ".lua")
+	term.write(mod:sub(4, h-1).." ")
+	local ok, k = pcall(file)
+	if ok then
+		term.setTextColor(colors.lime)
+		print("OK")
+	else
+		term.setTextColor(colors.red)
+		print("FAILED")
+	end
+end
+
+shell.run("/buildOS/system/os.lua")
+--[[term.setCursorPos(1,1)
+term.setBackgroundColor(colors.black)
+term.setTextColor(colors.white)
+print("Shutting system down...")
+os.shutdown()]]

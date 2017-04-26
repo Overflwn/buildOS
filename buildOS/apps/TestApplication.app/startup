@@ -1,0 +1,6 @@
+
+while true do
+	local event, button, x, y = os.pullEvent("mouse_click")
+	term.setCursorPos(x, y)
+	term.write("X")
+end

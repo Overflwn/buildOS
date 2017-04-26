@@ -1,0 +1,229 @@
+--[[
+	APPNAME: Desktop
+	TYPE: Application
+	LAST CHANGE: 04/26/17
+	DESCRIPTION:
+		This application is there
+		to let you manage your installed
+		applications/programs.
+		(Install, Remove, Info)
+]]
+
+-- Variables
+
+local originalTerm = term.current()
+local maxX, maxY = term.getSize()
+
+--main window
+local mainWindow = window.create(originalTerm, 1, 1, maxX, maxY)
+
+--invisible window at startup, which displays the information of a program later
+local infoWindow = window.create(originalTerm, math.floor(maxX/4), math.floor(maxY/4), math.floor(maxX/2), math.floor(maxY/2), false)
+
+--scrollable window containing a list with installed applications
+local appWindow = window.create(mainWindow, 2, 6, maxX-2, maxY-5)
+
+local appInfo = {
+	author = "",
+	shortinfo = "",
+}
+
+-- Functions
+
+local function drawInfo()
+	local mx, my = infoWindow.getSize()
+	infoWindow.setVisible(true)
+	infoWindow.setBackgroundColor(colors.white)
+	infoWindow.setTextColor(colors.lime)
+	infoWindow.clear()
+	infoWindow.setCursorPos(2, 2)
+	infoWindow.write("Author: "..appInfo.author)
+	infoWindow.setCursorPos(mx, 1)
+	infoWindow.setBackgroundColor(colors.red)
+	infoWindow.setTextColor(colors.white)
+	infoWindow.write("X")
+	infoWindow.setBackgroundColor(colors.white)
+	infoWindow.setTextColor(colors.lime)
+	infoWindow.setCursorPos(2, 3)
+	infoWindow.write("Info:")
+	infoWindow.setCursorPos(2, 4)
+	local strings = {}
+	local sl = math.ceil(string.len(appInfo.shortinfo)/(mx-2))
+	local h = true
+	local c = 1
+	local str = appInfo.shortinfo
+	repeat
+		if #str > mx-2 then
+			table.insert(strings, string.sub(str, 1, mx-2))
+			str = string.sub(str, mx-1)
+		elseif #str <= mx-2 then
+			table.insert(strings, str)
+			h = nil
+		else
+			h = nil
+		end
+		c = c+1
+	until h == nil
+	term.redirect(infoWindow)
+	for i = 1, #strings do
+		local cx, cy = term.getCursorPos()
+		if cy < my then
+			term.write(strings[i])
+			term.setCursorPos(2, cy+1)
+		elseif cy == my then
+			term.write(strings[i])
+		else
+			break
+		end
+	end
+	
+	while true do
+		local event, button, x, y = os.pullEvent("mouse_click")
+		if button == 1 and x == math.floor(maxX/4) + mx - 1 and y == math.floor(maxY/4) then
+			infoWindow.setVisible(false)
+			return
+		end
+	end
+end
+
+local function drawMenu()
+	local isRightClick = false
+	local oldx, oldy = 0, 0
+	local contextWindow = window.create(originalTerm, 1, 1, 6, 2, false)
+	local selectedApp = ""
+	contextWindow.setBackgroundColor(colors.white)
+	contextWindow.setTextColor(colors.red)
+	contextWindow.write("Remove")
+	contextWindow.setTextColor(colors.black)
+	contextWindow.setCursorPos(1, 2)
+	contextWindow.write(" Info ")
+	term.redirect(mainWindow)
+	term.setBackgroundColor(colors.lightGray)
+	term.setTextColor(colors.white)
+	term.clear()
+	term.setCursorPos(2,2)
+	term.write("Free Space: "..(fs.getFreeSpace("/") / 1000).."KB")
+	term.setBackgroundColor(colors.lime)
+	term.setCursorPos(2,4)
+	term.write("Install")
+	term.setBackgroundColor(colors.lightGray)
+	term.redirect(originalTerm)
+	appWindow.setBackgroundColor(colors.gray)
+	appWindow.setTextColor(colors.lime)
+	appWindow.clear()
+	term.redirect(appWindow)
+	local list = fs.list("/buildOS/apps/")
+	for each, program in ipairs(list) do
+		if each <= maxY-5 then
+			term.write(string.sub(program, 1, #program-4))
+			local cx, cy = term.getCursorPos()
+			if each < maxY-5 then
+				term.setCursorPos(1, cy+1)
+			end
+		end
+	end
+	local left, missing = 0, 0
+	if (#list - (maxY-5)) < 0 then left = 0 else left = (#list - (maxY-5)) end
+	term.redirect(mainWindow)
+	while true do
+		local event, button, x, y = os.pullEvent()
+		if event == "mouse_click" and button == 2 and x >= 2 and y >= 6 and x <= maxX-1 and y <= maxY-1 then
+			yy = y-5
+			if list[missing+yy] then
+				selectedApp = "/buildOS/apps/"..list[missing+yy].."/"
+				oldx, oldy = x, y
+				isRightClick = true
+				if x + 5 <= maxX then
+					if y + 1 <= maxY then
+						contextWindow.setVisible(true)
+						contextWindow.reposition(x, y)
+						mainWindow.redraw()
+						contextWindow.redraw()
+					elseif y + 1 > maxY then
+						contextWindow.setVisible(true)
+						contextWindow.reposition(x, y-1)
+						mainWindow.redraw()
+						contextWindow.redraw()
+						oldy = y-1
+					end
+				elseif x + 5 > maxX then
+					if y + 1 <= maxY then
+						contextWindow.setVisible(true)
+						contextWindow.reposition(x-5, y)
+						mainWindow.redraw()
+						contextWindow.redraw()
+						oldx = x-5
+					elseif y + 1 > maxY then
+						contextWindow.setVisible(true)
+						contextWindow.reposition(x-5, y-1)
+						mainWindow.redraw()
+						contextWindow.redraw()
+						oldx, oldy = x-5, y-1
+					end
+				end
+			end
+		elseif event == "mouse_click" and isRightClick and button == 1 and ((x < oldx or x > oldx+5) or (y < oldy or y > oldy+1)) then
+			contextWindow.setVisible(false)
+			mainWindow.redraw()
+			isRightClick = false
+			selectedApp = ""
+		elseif event == "mouse_click" and isRightClick and button == 1 and x >= oldx and x <= oldx+5 and y >= oldy and y <= oldy+1 then
+			yy = math.abs(oldy - y) + 1
+			if yy == 2 then
+				-- Option two: "Info"
+				if fs.exists(selectedApp.."info") then
+					local file = fs.open(selectedApp.."info", "r")
+					local inhalt = textutils.unserialize(file.readAll())
+					file.close()
+					appInfo.author = inhalt.author
+					appInfo.shortinfo = inhalt.shortinfo
+					drawInfo()
+					contextWindow.setVisible(false)
+					mainWindow.redraw()
+					isRightClick = false
+					selectedApp = ""
+				else
+					appInfo.author = "NO info"
+					appInfo.shortinfo = "NO info"
+					drawInfo()
+					contextWindow.setVisible(false)
+					mainWindow.redraw()
+					isRightClick = false
+					selectedApp = ""
+				end
+			elseif yy == 1 then
+				-- Option one: "Remove"
+				fs.delete(selectedApp)
+				desktopRefresh()
+				contextWindow.setVisible(false)
+				mainWindow.redraw()
+				isRightClick = false
+				selectedApp = ""
+			end
+		elseif event == "mouse_scroll" then
+			-- -1 = up; 1 = down
+			if button == -1 then
+				if missing > 0 then
+					left = left+1
+					appWindow.scroll(-1)
+					appWindow.setCursorPos(1,1)
+					appWindow.write(string.sub(list[missing], 1, #list[missing]-4))
+					missing = missing-1
+				end
+			elseif button == 1 then
+				if left > 0 then
+					appWindow.scroll(1)
+					appWindow.setCursorPos(1, maxY-5)
+					appWindow.write(string.sub(list[missing+(maxY-5)+1], 1, #list[missing+(maxY-5)+1]-4))
+					missing = missing + 1
+					left = left - 1
+				end
+			end
+		end
+	end
+	term.redirect(originalTerm)
+end
+
+-- Code
+
+drawMenu()
