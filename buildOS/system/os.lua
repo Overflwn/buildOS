@@ -1,7 +1,7 @@
 --[[
 	PATH: /buildOS/system/os.lua
 	TYPE: Main OS Script
-	LAST CHANGE: 04/26/17
+	LAST CHANGE: 04/29/17
 	DESCRIPTION:
 		This script is responsible for setting
 		everything GUI-related up and is basically
@@ -17,7 +17,7 @@ local maxX, maxY = term.getSize()
 local tasklist = taskmanager.createList()
 local toolBar = window.create(originalTerm, maxX-2, 1, 2, 1)
 local menuBar = window.create(originalTerm, 1, 1, maxX, 1)
-local taskBar = window.create(originalTerm, 1, 2, maxX, maxY-1, false)
+local taskBar = window.create(originalTerm, 1, 2, 4, maxY-1, false)
 local appWindow = window.create(originalTerm, 1, 2, maxX, maxY-1)
 local menuBarExtension = window.create(originalTerm, 1, 2, maxX, 1, false)
 local inApp = false
@@ -45,7 +45,7 @@ local function startApp(name)
 			end
 		end
 		
-		local ok, err = taskmanager.createTask(tasklist, name, "/buildOS/apps/"..name..".app/startup", env)
+		local ok, err = taskmanager.createTask(tasklist, name, "/buildOS/apps/"..name..".app/startup", env, false, "/buildOS/apps/"..name..".app/")
 		if not ok then
 			local curTerm = term.current()
 			local errWin = window.create(originalTerm, math.floor(maxX/4), math.floor(maxY/4), math.floor(maxX/2), math.floor(maxY/2))
@@ -116,70 +116,179 @@ local function drawTaskBar()
 	taskBar.clear()
 	local missing = 0
 	local left = 0
+	local oldt = term.current()
+	--the task on the bottom of the taskmanager
+	local last = 0
+	--the task on the top of the taskmanager
+	local lastbegin = 1
+	term.redirect(taskBar)
+	--table containing every Y position of every task in the taskmanager
+	local positions = {}
+	--the imaginary cursor position
+	local cpos = 1
 	for each, task in ipairs(tasklist.tasks) do
-		if each <= maxY-1 then
-			taskBar.write(task.name)
-			local cx, cy = taskBar.getCursorPos()
-			taskBar.setCursorPos(maxX-1, cy)
-			taskBar.setBackgroundColor(colors.blue)
-			taskBar.write(">")
-			taskBar.setBackgroundColor(colors.red)
-			taskBar.write("X")
-			taskBar.setBackgroundColor(colors.lightGray)
-			if each < maxY-1 then
-				taskBar.setCursorPos(1, cy+1)
+		local cx, cy = term.getCursorPos()
+		
+		--If a part of the image still fits into the taskbar
+		if cpos < maxY-1 then
+			local img
+			if fs.exists(tostring(task.path).."icon") then
+				img = paintutils.loadImage(tostring(task.path).."icon")
+			else
+				img = paintutils.loadImage("/buildOS/system/dummyIcon")
 			end
+			paintutils.drawImage(img, cx, cy)
+			term.setCursorPos(4, cy)
+			term.setBackgroundColor(colors.red)
+			term.setTextColor(colors.white)
+			term.write("X")
+			term.setBackgroundColor(colors.blue)
+			term.setCursorPos(3, cy)
+			term.write(">")	
 		end
+		
+		--If there is still space left, set the cursorpos. Else set what the last task on the screen is and increase the imaginary cursor position
+		table.insert(positions, cpos)
+		if cy+5 < maxY-1 then
+			term.setCursorPos(1, cy+5)
+		elseif last == 0 then
+			last = #positions
+		end
+		cpos = cpos+5
 	end
-	if (#tasklist.tasks - (maxY-1)) < 0 then left = 0 else left = (#tasklist.tasks - (maxY-1)) end
+	term.redirect(oldt)
+	
+	--If there are more icons to draw than they fit on the screen, set "left" to the remaining pixels
+	if (positions[#positions] + 4) - (maxY-1) > 0 then
+		left = left + (positions[#positions] + 4) - (maxY-1)
+	end
+	
+	--Main loop
 	while true do
 		local event, button, x, y = os.pullEventRaw()
-		if event == "mouse_click" and button == 1 and x == maxX and y > 1 then
+		if event == "mouse_click" and button == 1 and x == 4 and y > 1 then
+			--Kill a task
 			y = y-1
-			if tasklist.tasks[missing+y] and not tasklist.tasks[missing+y].core then
-				windows[tasklist.tasks[missing+y].name] = nil
-				table.remove(tasklist.tasks, missing+y)
-				drawTaskBar()
-				return true
+			for a, b in ipairs(positions) do
+				if b - missing == y and not tasklist.tasks[a].core then
+					windows[tasklist.tasks[a].name] = nil
+					table.remove(tasklist.tasks, a)
+					drawTaskBar()
+					return true
+				end
 			end
-		elseif event == "mouse_click" and button == 1 and x == maxX-1 and y > 1 then
+		elseif event == "mouse_click" and button == 1 and x == 3 and y > 1 then
+			--Resume a task
 			y = y-1
-			if tasklist.tasks[missing+y] and not tasklist.tasks[missing+y].core then
-				resumeApp(missing+y)
-				return false
+			for a, b in ipairs(positions) do
+				if b - missing == y and not tasklist.tasks[a].core then
+					resumeApp(a)
+					return false
+				end
 			end
 		elseif event == "mouse_scroll" then
 			-- -1 = up; 1 = down
 			if button == -1 then
 				if missing > 0 then
 					left = left+1
+					missing = missing-1
 					taskBar.scroll(-1)
 					taskBar.setCursorPos(1,1)
-					taskBar.write(tasklist.tasks[missing].name)
-					taskBar.setCursorPos(maxX-1, 1)
-					taskBar.setBackgroundColor(colors.blue)
-					taskBar.write(">")
-					taskBar.setBackgroundColor(colors.red)
-					taskBar.write("X")
-					taskBar.setBackgroundColor(colors.lightGray)
-					missing = missing-1
+					
+					--If you scrolled so far that the a new task appeared at the top, set it as the new top
+					if positions[lastbegin]-missing > 1 then
+						lastbegin = lastbegin-1
+					end
+					
+					--If you scrolled so far that the old bottom task is gone completely, set the task that came before it as the new bottom
+					if positions[last]-missing > maxY-1 then
+						last = last-1
+					end
+					
+					local oldt = term.current()
+					term.redirect(taskBar)
+					local img
+					if fs.exists(tostring(tasklist.tasks[lastbegin].path).."icon") then
+						img = paintutils.loadImage(tostring(tasklist.tasks[lastbegin].path).."icon")
+					else
+						img = paintutils.loadImage("/buildOS/system/dummyIcon")
+					end
+					paintutils.drawImage(img, 1, positions[lastbegin]-missing)
+					if positions[lastbegin]-missing > 0 then
+						--If the first row of pixels of the taskicon is visible, draw the X and > buttons
+						term.setCursorPos(3, positions[lastbegin]-missing)
+						term.setBackgroundColor(colors.blue)
+						term.write(">")
+						term.setBackgroundColor(colors.red)
+						term.write("X")
+						term.setBackgroundColor(colors.lightGray)
+					end
+					term.redirect(oldt)
 				end
 			elseif button == 1 then
 				if left > 0 then
 					taskBar.scroll(1)
 					taskBar.setCursorPos(1, maxY-1)
-					taskBar.write(tasklist.tasks[missing+(maxY-1)+1].name)
-					taskBar.setCursorPos(maxX-1, maxY-1)
-					taskBar.setBackgroundColor(colors.blue)
-					taskBar.write(">")
-					taskBar.setBackgroundColor(colors.red)
-					taskBar.write("X")
-					taskBar.setBackgroundColor(colors.lightGray)
+					local found = false
+					for a, b in ipairs(positions) do
+						if maxY-1+missing+1 == b then
+							--If you scrolled so far down that you already start to see the a new task
+							local img
+							if fs.exists(tostring(tasklist.tasks[a].path).."icon") then
+								img = paintutils.loadImage(tostring(tasklist.tasks[a].path).."icon")
+							else
+								img = paintutils.loadImage("/buildOS/system/dummyIcon")
+							end
+							local oldt = term.current()
+							term.redirect(taskBar)
+							paintutils.drawImage(img, 1, maxY-1)
+							term.setBackgroundColor(colors.blue)
+							term.setCursorPos(3, maxY-1)
+							term.write(">")
+							term.setBackgroundColor(colors.red)
+							term.write("X")
+							term.setBackgroundColor(colors.lightGray)
+							term.redirect(oldt)
+							last = a
+							found = true
+							break
+						end
+					end
+					if not found then
+						--If the 'last' task is still the same, just redraw it
+						local oldt = term.current()
+						term.redirect(taskBar)
+						term.setCursorPos(1, positions[last] - ( missing+1 ))
+						local img
+						if fs.exists(tostring(tasklist.tasks[last].path).."icon") then
+							img = paintutils.loadImage(tostring(tasklist.tasks[last].path).."icon")
+						else
+							img = paintutils.loadImage("/buildOS/system/dummyIcon")
+						end
+						paintutils.drawImage(img, 1, positions[last] - ( missing+1 ))
+						term.setBackgroundColor(colors.blue)
+						term.setCursorPos(3, positions[last] - ( missing+1 ))
+						term.write(">")
+						term.setBackgroundColor(colors.red)
+						term.write("X")
+						term.setBackgroundColor(colors.lightGray)
+						term.redirect(oldt)
+						
+					end
 					missing = missing + 1
 					left = left - 1
+					
+					--Check if you scrolled so far that the old task on the top is gone completely
+					for h, j in ipairs(positions) do
+						if j-missing == 1 then
+							lastbegin = h
+							break
+						end
+					end
 				end
 			end
 		elseif event == "mouse_click" and button == 1 and x == 1 and y == 1 then
+			--Close the taskmanager
 			taskBar.setVisible(false)
 			return true
 		end
@@ -218,8 +327,8 @@ appWindow.clear()
 --[[SCREEN SETUP END]]--
 
 --[[CORE TASK SETUP]]--
-local ok, err = taskmanager.createTask(tasklist, "Desktop", "/buildOS/coreapps/desktop.app/startup", _G, true)
-windows.Desktop = window.create(appWindow, 1, 1, maxX, maxY-1)
+local ok, err = taskmanager.createTask(tasklist, "desktop", "/buildOS/coreapps/desktop.app/startup", _G, true)
+windows.desktop = window.create(appWindow, 1, 1, maxX, maxY-1)
 --[[CORE TASK SETUP END]]--
 
 
@@ -250,14 +359,14 @@ while true do
 	if event == "mouse_click" and button == 1 and x == maxX and y == 1 then
 		os.shutdown()
 	elseif event == "mouse_click" and button == 1 and x == 1 and y == 1 then
-		windows.Desktop.setVisible(true)
-		windows.Desktop.redraw()
+		windows.desktop.setVisible(true)
+		windows.desktop.redraw()
 		menuBar.redraw()
 		inApp = false
 		curApp = 0
 		local redraw = drawTaskBar()
 		if redraw then
-			windows.Desktop.redraw()
+			windows.desktop.redraw()
 			tasklist.tasks[1].front = true
 		end
 	elseif inApp and event == "mouse_click" and button == 1 and x == maxX-2 and y == 1 then
@@ -268,27 +377,27 @@ while true do
 			end
 		end
 		tasklist.tasks[1].front = true
-		windows.Desktop.setVisible(true)
-		windows.Desktop.redraw()
+		windows.desktop.setVisible(true)
+		windows.desktop.redraw()
 		menuBar.redraw()
 		inApp = false
 	elseif inApp and event == "mouse_click" and button == 1 and x == maxX-1 and y == 1 then
 		tasklist.tasks[1].front = true
 		windows[tasklist.tasks[curApp].name] = nil
-		windows.Desktop.setVisible(true)
-		windows.Desktop.redraw()
+		windows.desktop.setVisible(true)
+		windows.desktop.redraw()
 		menuBar.redraw()
 		inApp = false
 		table.remove(tasklist.tasks, curApp)
 	elseif event == "mouse_click" and button == 1 and x == math.floor(maxX/2) and y == 1 then
-		windows.Desktop.setVisible(true)
-		windows.Desktop.redraw()
+		windows.desktop.setVisible(true)
+		windows.desktop.redraw()
 		menuBar.redraw()
 		inApp = false
 		curApp = 0
 		local redraw = drawExtendedMenu()
 		if redraw then
-			windows.Desktop.redraw()
+			windows.desktop.redraw()
 			tasklist.tasks[1].front = true
 		end
 	elseif event == "os_killApp" and button then
@@ -303,8 +412,8 @@ while true do
 		end
 		if found then
 			windows[tasklist.tasks[found].name] = nil
-			windows.Desktop.setVisible(true)
-			windows.Desktop.redraw()
+			windows.desktop.setVisible(true)
+			windows.desktop.redraw()
 			menuBar.redraw()
 			inApp = false
 			table.remove(tasklist.tasks, found)

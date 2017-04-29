@@ -18,7 +18,7 @@ function taskmanager.createList()
 	return list
 end
 
-function taskmanager.createTask(list, name, p, env, core)
+function taskmanager.createTask(list, name, p, env, core, path)
 	-- this function creates a task, puts it into the specified environment and finally inserts it into the tasklist
 	if type(list) == "table" and list.tasklist and ((type(p) == "string" and #p > 0 and fs.exists(p) and not fs.isDir(p)) or (type(p) == "function")) and type(env) == "table" then
 		list = list.tasks
@@ -29,7 +29,9 @@ function taskmanager.createTask(list, name, p, env, core)
 			filtr = nil,
 			core = false,
 			front = true,
+			path = path,
 		}
+		task.path = path
 		local function check(counter, increase)
 			for each, t in ipairs(list) do
 				if t.name == task.name and not increase then
